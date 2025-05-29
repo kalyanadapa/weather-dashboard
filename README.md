@@ -10,7 +10,7 @@ A React + Next.js weather dashboard app that fetches real-time weather data from
 - Deployed on Netlify
 
 ## Live Demo
-https://6836ea8417a05a0008276e9b--weather-dashboard-report.netlify.app/
+(https://weather-dashboard-report.netlify.app/)
 
 ## Features
 
