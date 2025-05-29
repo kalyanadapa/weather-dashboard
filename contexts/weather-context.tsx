@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useReducer, useEffect } from "react"
+import { createContext, useContext, useReducer, useEffect, useCallback } from "react"
 
 interface WeatherData {
   name: string
@@ -92,6 +92,7 @@ const WeatherContext = createContext<{
   dispatch: React.Dispatch<WeatherAction>
   fetchWeather: (city: string) => Promise<void>
   fetchForecast: (city: string) => Promise<void>
+  fetchWeatherByCoords: (lat: number, lon: number) => Promise<void>
 } | null>(null)
 
 export function WeatherProvider({ children }: { children: React.ReactNode }) {
@@ -99,62 +100,120 @@ export function WeatherProvider({ children }: { children: React.ReactNode }) {
 
   const API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY
 
-  const fetchWeather = async (city: string) => {
-    if (!API_KEY) {
-      dispatch({ type: "SET_ERROR", payload: "API key not configured" })
-      return
-    }
+  const fetchWeather = useCallback(
+    async (city: string) => {
+      if (!API_KEY) {
+        dispatch({ type: "SET_ERROR", payload: "API key not configured" })
+        return
+      }
 
-    dispatch({ type: "SET_LOADING", payload: true })
-    dispatch({ type: "CLEAR_ERROR" })
+      dispatch({ type: "SET_LOADING", payload: true })
+      dispatch({ type: "CLEAR_ERROR" })
 
-    try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`,
-      )
+      try {
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`,
+        )
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error("City not found. Please check the spelling and try again.")
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("City not found. Please check the spelling and try again.")
+          }
+          throw new Error("Failed to fetch weather data. Please try again.")
         }
-        throw new Error("Failed to fetch weather data. Please try again.")
-      }
 
-      const data = await response.json()
-      dispatch({ type: "SET_CURRENT_WEATHER", payload: data })
-      dispatch({ type: "SET_LAST_SEARCHED_CITY", payload: city })
-
-      // Save to localStorage
-      localStorage.setItem("lastSearchedCity", city)
-
-      // Fetch forecast as well
-      await fetchForecast(city)
-    } catch (error) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: error instanceof Error ? error.message : "An unexpected error occurred",
-      })
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false })
-    }
-  }
-
-  const fetchForecast = async (city: string) => {
-    if (!API_KEY) return
-
-    try {
-      const response = await fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`,
-      )
-
-      if (response.ok) {
         const data = await response.json()
-        dispatch({ type: "SET_FORECAST", payload: data })
+        dispatch({ type: "SET_CURRENT_WEATHER", payload: data })
+        dispatch({ type: "SET_LAST_SEARCHED_CITY", payload: city })
+
+        // Save to localStorage
+        localStorage.setItem("lastSearchedCity", city)
+
+        // Fetch forecast as well
+        const forecastResponse = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`,
+        )
+        if (forecastResponse.ok) {
+          const forecastData = await forecastResponse.json()
+          dispatch({ type: "SET_FORECAST", payload: forecastData })
+        }
+      } catch (error) {
+        dispatch({
+          type: "SET_ERROR",
+          payload: error instanceof Error ? error.message : "An unexpected error occurred",
+        })
+      } finally {
+        dispatch({ type: "SET_LOADING", payload: false })
       }
-    } catch (error) {
-      console.error("Failed to fetch forecast:", error)
-    }
-  }
+    },
+    [API_KEY],
+  )
+
+  const fetchForecast = useCallback(
+    async (city: string) => {
+      if (!API_KEY) return
+
+      try {
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`,
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          dispatch({ type: "SET_FORECAST", payload: data })
+        }
+      } catch (error) {
+        console.error("Failed to fetch forecast:", error)
+      }
+    },
+    [API_KEY],
+  )
+
+  const fetchWeatherByCoords = useCallback(
+    async (lat: number, lon: number) => {
+      if (!API_KEY) {
+        dispatch({ type: "SET_ERROR", payload: "API key not configured" })
+        return
+      }
+
+      dispatch({ type: "SET_LOADING", payload: true })
+      dispatch({ type: "CLEAR_ERROR" })
+
+      try {
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
+        )
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch weather data for your location.")
+        }
+
+        const data = await response.json()
+        dispatch({ type: "SET_CURRENT_WEATHER", payload: data })
+        dispatch({ type: "SET_LAST_SEARCHED_CITY", payload: data.name })
+
+        // Save to localStorage
+        localStorage.setItem("lastSearchedCity", data.name)
+
+        // Fetch forecast as well
+        const forecastResponse = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
+        )
+        if (forecastResponse.ok) {
+          const forecastData = await forecastResponse.json()
+          dispatch({ type: "SET_FORECAST", payload: forecastData })
+        }
+      } catch (error) {
+        dispatch({
+          type: "SET_ERROR",
+          payload: error instanceof Error ? error.message : "An unexpected error occurred",
+        })
+      } finally {
+        dispatch({ type: "SET_LOADING", payload: false })
+      }
+    },
+    [API_KEY],
+  )
 
   // Load last searched city from localStorage on mount
   useEffect(() => {
@@ -163,7 +222,7 @@ export function WeatherProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: "SET_LAST_SEARCHED_CITY", payload: lastCity })
       fetchWeather(lastCity)
     }
-  }, [])
+  }, [fetchWeather])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -174,10 +233,10 @@ export function WeatherProvider({ children }: { children: React.ReactNode }) {
 
       return () => clearInterval(interval)
     }
-  }, [state.lastSearchedCity])
+  }, [state.lastSearchedCity, fetchWeather])
 
   return (
-    <WeatherContext.Provider value={{ state, dispatch, fetchWeather, fetchForecast }}>
+    <WeatherContext.Provider value={{ state, dispatch, fetchWeather, fetchForecast, fetchWeatherByCoords }}>
       {children}
     </WeatherContext.Provider>
   )

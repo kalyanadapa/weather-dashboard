@@ -8,6 +8,7 @@ import { ErrorDisplay } from "@/components/error-display"
 import { Loading } from "@/components/loading"
 import { TemperatureToggle } from "@/components/temperature-toggle"
 import { useWeather } from "@/contexts/weather-context"
+import { LocationPermission } from "@/components/location-permission"
 
 function DashboardContent() {
   const { state } = useWeather()
@@ -19,6 +20,7 @@ function DashboardContent() {
 
       <div className="relative z-10 container mx-auto px-4 py-8">
         <TemperatureToggle />
+        <LocationPermission />
 
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
